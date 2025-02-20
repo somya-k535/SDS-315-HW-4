@@ -1,0 +1,190 @@
+---
+title: "HW4_SDS315"
+author: "Somya Krishna"
+date: "2025-02-19"
+output:
+  pdf_document: default
+  html_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE,
+                      eval = TRUE, 
+                      warning = TRUE,
+                      message = FALSE,
+                      fig.align = "center", 
+                      R.options = list(max.print=50))
+```
+
+```{r, echo=FALSE, message=FALSE, warning=FALSE}
+# Load libraries
+library(tidyverse)
+library(mosaic)
+```
+
+# [Problem 1: Iron Bank]{style="color:hotpink;"}
+```{r, echo=FALSE, message=FALSE, warning=FALSE}
+# Are the observed data (70 flagged trades out of 2021) consistent with the SEC’s null hypothesis that, over the long run, securities trades from the Iron Bank are flagged at the same 2.4% baseline rate as that of other traders? Use Monte Carlo simulation (with at least 100000 simulations) to calculate a p-value under this null hypothesis.
+
+# Simulate 100,000 runs of flagged trades out of 2021 people at the 2.4% baseline rate
+sim_flips = do(100000)*nflip(n=2021, prob=0.024)
+
+# Get p-value
+sum(sim_flips >= 70)/100000
+
+# Visualize Distribution
+ggplot(sim_flips) +
+  geom_histogram(aes(x = nflip), binwidth = 1, fill = "pink") +
+  labs(title = "100,000 Simulations of Securities Trades that were flagged", x ="Number of Flagged Trades per Simulation",  y = "Frequncy Across Simulations")
+
+```
+My null hypotheses is that the probability of security trades from the Iron Bank being flagged is 2.4%. The alternate hypothesis is that this probability is greater than 2.4%. The test statistic the 70 out of 2021 trades that were flagged. The p-value is 0.002. Because the p-value very low, we reject the null hypothesis. This means that there is significant evidence that the probability of security trades from the Iron Bank is above 2.4%.
+
+
+# [Problem 2: Health Inspections]{style="color:hotpink;"}
+```{r, echo=FALSE, message=FALSE, warning=FALSE}
+# Are the observed data for Gourmet Bites consistent with the Health Department’s null hypothesis that, on average, restaurants in the city are cited for health code violations at the same 3% baseline rate?
+
+# Simulate 100,000 runs of health code violations out of 2021 people at the 3% baseline rate
+sim_flips2 <- do(100000)*nflip(n=50, prob=0.03)
+
+# Get p-value
+sum(sim_flips2 >= 8)/100000
+
+# Visualize Distribution
+ggplot(sim_flips2) +
+  geom_histogram(aes(x = nflip), binwidth = 1, fill = "pink") +
+  labs(title = "100,000 Simulations of Gourmet Bites Restaurants with Health Code Violations", x ="Number of Health Code Violations per Simulation",  y = "Frequncy Across Simulations")
+
+
+```
+My null hypotheses is that on average, restaurants in the city are cited for health code violations at the same 3% baseline rate. The alternative hypothesis is that the probability is higher than 3%. The test statistic the 8 out of 50 health code violations. The p-value is 0.0001. Because the p-value very low, we reject the null hypothesis. This means that there is significant evidence that the probability of getting 8 out of 50 health violations is unlikely since it is unlikely to happen purely by chance.
+
+
+
+# [Problem 3: Evaluating Jury Selection for Bias]{style="color:hotpink;"}
+```{r, echo=FALSE, message=FALSE, warning=FALSE}
+# Using an appropriate hypothesis test, determine whether the distribution of jurors empaneled by this judge is significantly different from the county’s population proportions.
+
+# Set the expected jurors distribution
+expected_distribution <- c(Group1 = 0.30, Group2 = 0.25, Group3 = 0.20, Group4 = 0.15, Group5 = 0.10)
+observed_counts <- c(Group1 = 85, Group2 = 56, Group3 = 59, Group4 = 27, Group5 = 13)
+
+# "multinomial sampling" equals sampling from a named set of categories
+# simulate 1 bag of m&ms, with 56 m&ms in each bag, with the expected distribution
+simulated_counts <- rmultinom(1, 240, expected_distribution)
+
+# Define a function to calculate the chi-squared statistic
+chi_squared_statistic <- function(observed, expected){
+  sum((observed-expected)^2/expected)
+}
+chi2 <- chi_squared_statistic(simulated_counts, 240*expected_distribution)
+
+# Repeat simulations
+chi2_simulations <- do(10000)*{
+  simulated_counts <- rmultinom(1, 240, expected_distribution)
+  thischi <- chi_squared_statistic(simulated_counts, 240*expected_distribution)
+  c(chi2 = thischi) # return a vector with names and values
+}
+chi2 <- chi_squared_statistic(observed_counts, 240*expected_distribution)
+
+# P-Value
+chi2_simulations |>
+  summarise(count(chi2 >= 12.42639)/n())
+
+  # Visualize Distribution
+ggplot(chi2_simulations) +
+  geom_histogram(aes(x = chi2), fill = "pink") +
+  labs(title = "Distribution of Jurors that are Different from Expected Population", x = "Difference in Juror Counts", y = "Frequency across Simulations")
+
+```
+The null hypothesis is that the jurors selected by the judges match the distribution of the county's juror distribution. The alternative hypothesis is that the distribution does not match. The test statistic is the chi-squared test because we are comparing observed and expected. The p-value is 0.0136. Since it is small, we reject the null hypothesis. There is enough evidence to claim that the jurors selected by the judge differs significantly from the county's distribution of jurors. This suggests systematic bias in jury selection. Another explanation could be that some jurors of certain groups were unavailable, leading to an increase in the number of jurors in other groups. To investigate further, I could increase the sample size to reduce variability. I could also do many simulations.
+
+# [Problem 4: LLM Watermarking]{style="color:hotpink;"}
+## [Part A]{style="color:palevioletred;"}
+
+```{r, echo=FALSE, message=FALSE, warning=FALSE}
+sents <- readLines("brown_sentences.txt")
+
+cleaned <- function(sentence) {
+  sentence |>
+    str_to_upper() |>     
+    str_remove_all("[^A-Z]")      
+}
+
+brown <- map_chr(sents, cleaned)
+
+letter_counts <- function(sentence) {
+  table(factor(str_split(sentence, "")[[1]], levels = LETTERS))
+}
+
+observed_counts <- map(brown, letter_counts)
+
+expected_frequencies <- read_csv("letter_frequencies.csv")
+expected_frequencies <- expected_frequencies |>
+  mutate(Letter = str_to_upper(Letter)) |>
+  filter(Letter %in% LETTERS)
+expected_probs <- setNames(expected_frequencies$Probability, expected_frequencies$Letter)
+
+compute_expected <- function(sentence) {
+  len <- nchar(sentence)
+  expected_counts <- expected_probs * len
+  return(expected_counts)
+}
+
+expected_counts <- map(brown, compute_expected)
+
+chi <- function(observed, expected) {
+  sum((observed - expected)^2 / expected, na.rm = TRUE)
+}
+
+values <- map2_dbl(observed_counts, expected_counts, chi)
+
+distribution <- tibble(values)
+  
+```
+
+## [Part B]{style="color:palevioletred;"}
+
+```{r, echo=FALSE, message=FALSE, warning=FALSE}
+# For each of these sentences, calculate a p-value under the null hypothesis that the sentence follows the “typical” English letter distribution. Use chi-squared based on letter frequencies as a test statistic. You will need the null or reference distribution you calculated in Part A. Show a table of these p-values to three decimal places.
+
+# Define your test sentences
+test_sentences <- c(
+  "She opened the book and started to read the first chapter, eagerly anticipating what might come next.",
+  "Despite the heavy rain, they decided to go for a long walk in the park, crossing the main avenue by the fountain in the center.",
+  "The museum’s new exhibit features ancient artifacts from various civilizations around the world.",
+  "He carefully examined the document, looking for any clues that might help solve the mystery.",
+  "The students gathered in the auditorium to listen to the guest speaker’s inspiring lecture.",
+  "Feeling vexed after an arduous and zany day at work, she hoped for a peaceful and quiet evening at home, cozying up after a quick dinner with some TV, or maybe a book on her upcoming visit to Auckland.",
+  "The chef demonstrated how to prepare a delicious meal using only locally sourced ingredients, focusing mainly on some excellent dinner recipes from Spain.",
+  "They watched the sunset from the hilltop, marveling at the beautiful array of colors in the sky.",
+  "The committee reviewed the proposal and provided many points of useful feedback to improve the project’s effectiveness.",
+  "Despite the challenges faced during the project, the team worked tirelessly to ensure its successful completion, resulting in a product that exceeded everyone’s expectations."
+)
+
+test_cleaned <- map_chr(test_sentences, cleaned)
+
+observed_counts_test <- map(test_cleaned, letter_counts)
+
+expected_counts_test <- map(test_cleaned, compute_expected)
+
+chi_test_values <- map2_dbl(observed_counts_test, expected_counts_test, chi)
+
+p_values <- map_dbl(chi_test_values, function(chi_value) {
+  mean(values >= chi_value)
+})
+
+p_values_table <- tibble(
+  Sentence = test_sentences,
+  P_Value = round(p_values, 3)
+)
+
+print(p_values_table)
+
+
+
+```
+The null hypothesis is that the letter distribution in the sentences follows the letter distribution of the English language. The alternative hypothesis is that the distribution does not follow the English language. The chi-squared statistic is our test statistic. All of the sentences have a fairly large p-value except for the p-value of 0.009. This sentence was, "Feeling vexed after an arduous and zany day at work, she hoped for a peaceful and quiet evening at home, cozying up after a quick dinner with some TV, or maybe a book on her upcoming visit to Auckland." This suggests that there is significant evidence that this came from AI.
+
+
